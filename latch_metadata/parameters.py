@@ -24,8 +24,8 @@ class SampleSheet:
     sample: str
     fastq_1: LatchFile
     fastq_2: Optional[LatchFile]
-    antibody: Optional[str] = None
-    control: Optional[str] = None
+    antibody: Optional[str]
+    control: Optional[str]
 
 
 class Reference_Type(Enum):
@@ -39,7 +39,7 @@ class Reference_Type(Enum):
 
 flow = [
     Section(
-        "Input/Output Options",
+        "Input",
         Params(
             "input",
             "fragment_size",
@@ -148,6 +148,7 @@ flow = [
     ),
 ]
 
+
 generated_parameters = {
     "run_name": NextflowParameter(
         type=str,
@@ -160,8 +161,7 @@ generated_parameters = {
         display_name="Sample Sheet",
         samplesheet=True,
         samplesheet_type="csv",
-        default=None,
-        description="Path to comma-separated file containing information about the samples in the experiment.",
+        description="Samplesheet containing information about the samples in the experiment.",
     ),
     "fragment_size": NextflowParameter(
         type=int,

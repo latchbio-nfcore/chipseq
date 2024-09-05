@@ -33,8 +33,8 @@ class SampleSheet:
     sample: str
     fastq_1: LatchFile
     fastq_2: Optional[LatchFile]
-    antibody: Optional[str] = None
-    control: Optional[str] = None
+    antibody: Optional[str]
+    control: Optional[str]
 
 
 class Reference_Type(Enum):
@@ -64,6 +64,11 @@ def initialize() -> str:
     print("Done.")
 
     return resp.json()["name"]
+
+
+input_construct_samplesheet = metadata._nextflow_metadata.parameters[
+    "input"
+].samplesheet_constructor
 
 
 @nextflow_runtime_task(cpu=4, memory=8, storage_gib=100)
@@ -140,6 +145,8 @@ def nextflow_runtime(
     shared_dir = Path("/nf-workdir")
     rename_current_execution(str(run_name))
 
+    input_samplesheet = input_construct_samplesheet(input)
+
     ignore_list = [
         "latch",
         ".latch",
@@ -179,7 +186,7 @@ def nextflow_runtime(
         "-c",
         "latch.config",
         "-resume",
-        *get_flag("input", input),
+        *get_flag("input", input_samplesheet),
         *get_flag("fragment_size", fragment_size),
         *get_flag("seq_center", seq_center),
         *get_flag("read_length", read_length),
