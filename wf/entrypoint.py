@@ -12,7 +12,6 @@ from flytekit.core.annotation import FlyteAnnotation
 from latch.executions import rename_current_execution, report_nextflow_used_storage
 from latch.ldata.path import LPath
 from latch.resources.tasks import custom_task, nextflow_runtime_task
-from latch.resources.workflow import workflow
 from latch.types import metadata
 from latch.types.directory import LatchDir, LatchOutputDir
 from latch.types.file import LatchFile
@@ -23,9 +22,15 @@ from latch_cli.utils import urljoins
 
 meta = Path("latch_metadata") / "__init__.py"
 import_module_by_path(meta)
-import latch_metadata
 
 sys.stdout.reconfigure(line_buffering=True)
+
+
+class Aligner(Enum):
+    bwa = "bwa"
+    bowtie2 = "bowtie2"
+    chromap = "chromap"
+    star = "star"
 
 
 @dataclass
@@ -40,7 +45,7 @@ class SampleSheet:
 class Reference_Type(Enum):
     homo_sapiens = "Homo sapiens (RefSeq GRCh38.p14)"
     mus_musculus = "Mus musculus (RefSeq GRCm39)"
-    rattus_norvegicus = "Rattus norvegicus (RefSeq GRCr8)"
+    # rattus_norvegicus = "Rattus norvegicus (RefSeq GRCr8)"
 
 
 input_construct_samplesheet = metadata._nextflow_metadata.parameters[
@@ -49,7 +54,9 @@ input_construct_samplesheet = metadata._nextflow_metadata.parameters[
 
 
 @custom_task(cpu=0.25, memory=0.5, storage_gib=1)
-def initialize() -> str:
+def initialize(run_name: str) -> str:
+    rename_current_execution(str(run_name))
+
     token = os.environ.get("FLYTE_INTERNAL_EXECUTION_ID")
     if token is None:
         raise RuntimeError("failed to get execution token")
@@ -100,10 +107,10 @@ def nextflow_runtime(
     fasta: Optional[LatchFile],
     gtf: Optional[LatchFile],
     gff: Optional[LatchFile],
-    bwa_index: Optional[str],
-    bowtie2_index: Optional[str],
-    chromap_index: Optional[str],
-    star_index: Optional[str],
+    bwa_index: Optional[LatchDir],
+    bowtie2_index: Optional[LatchDir],
+    chromap_index: Optional[LatchFile],
+    star_index: Optional[LatchDir],
     gene_bed: Optional[LatchFile],
     macs_gsize: Optional[float],
     blacklist: Optional[str],
@@ -138,13 +145,12 @@ def nextflow_runtime(
     skip_multiqc: bool,
     skip_qc: bool,
     fragment_size: int,
-    aligner: Optional[str],
+    aligner: Aligner,
     broad_cutoff: Optional[float],
     min_reps_consensus: Optional[int],
     deseq2_vst: bool,
 ) -> None:
     shared_dir = Path("/nf-workdir")
-    rename_current_execution(str(run_name))
 
     input_samplesheet = input_construct_samplesheet(input)
 
@@ -241,6 +247,16 @@ def nextflow_runtime(
             f"s3://latch-public/nf-core/chipseq/{latch_genome.name}/{latch_genome.name}.genomic.fna",
             "--gtf",
             f"s3://latch-public/nf-core/chipseq/{latch_genome.name}/{latch_genome.name}.genomic.gtf",
+            "--bwa_index",
+            f"s3://latch-public/nf-core/chipseq/{latch_genome.name}/index/bwa",
+            "--bowtie2_index",
+            f"s3://latch-public/nf-core/chipseq/{latch_genome.name}/index/bowtie2",
+            "--chromap_index",
+            f"s3://latch-public/nf-core/chipseq/{latch_genome.name}/chromap/index/{latch_genome.name}.index",
+            "--star_index",
+            f"s3://latch-public/nf-core/chipseq/{latch_genome.name}/index/star",
+            # "--gene_bed",
+            # f"s3://latch-public/nf-core/rnaseq/{latch_genome.name}/{latch_genome.name}.genomic.bed",
         ]
 
     print("Launching Nextflow Runtime")

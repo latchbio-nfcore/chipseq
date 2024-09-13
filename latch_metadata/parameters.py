@@ -1,22 +1,26 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Annotated, List, Optional
+from typing import List, Optional
 
-from flytekit.core.annotation import FlyteAnnotation
 from latch.types.directory import LatchOutputDir
 from latch.types.file import LatchFile
 from latch.types.metadata import (
     Fork,
     ForkBranch,
-    LatchAuthor,
-    NextflowMetadata,
+    Multiselect,
     NextflowParameter,
-    NextflowRuntimeResources,
     Params,
     Section,
     Spoiler,
     Text,
 )
+
+
+class Aligner(Enum):
+    bwa = "bwa"
+    bowtie2 = "bowtie2"
+    chromap = "chromap"
+    star = "star"
 
 
 @dataclass
@@ -31,10 +35,7 @@ class SampleSheet:
 class Reference_Type(Enum):
     homo_sapiens = "Homo sapiens (RefSeq GRCh38.p14)"
     mus_musculus = "Mus musculus (RefSeq GRCm39)"
-    rattus_norvegicus = "Rattus norvegicus (RefSeq GRCr8)"
-    # drosophila_melanogaster = "Drosophila melanogaster (RefSeq Release_6_plus_ISO1_MT)"
-    # rhesus_macaque = "Macaca mulatta (RefSeq rheMac10/Mmul_10)"
-    # saccharomyces_cerevisiae = "Saccharomyces cerevisiae (RefSeq R64)"
+    # rattus_norvegicus = "Rattus norvegicus (RefSeq GRCr8)"
 
 
 flow = [
@@ -61,59 +62,38 @@ flow = [
                 Params(
                     "fasta",
                     "gtf",
-                    "gff",
                 ),
                 Spoiler(
                     "Advanced Options",
                     Params(
+                        "gff",
                         "bwa_index",
                         "bowtie2_index",
                         "chromap_index",
                         "star_index",
                         "gene_bed",
-                        "macs_gsize",
                         "blacklist",
                         "save_reference",
+                    ),
+                    Text(
+                        "Use iGenomes with caution. The transcriptome and GTF files in iGenomes are vastly out of date with respect to current annotations from Ensembl e.g. human iGenomes annotations are from Ensembl release 75, while the current Ensembl release is 108. Please consider downloading and using a more updated version of your reference genome."
+                    ),
+                    Params(
+                        "genome",
                     ),
                 ),
             ),
         ),
     ),
     Section(
-        "Output Directory",
-        Params("run_name"),
-        Text("Parent directory for outputs"),
-        Params("outdir"),
-    ),
-    Spoiler(
-        "Advanced Options",
-        Section(
-            "Adapter Trimming Options",
-            Params(
-                "clip_r1",
-                "clip_r2",
-                "three_prime_clip_r1",
-                "three_prime_clip_r2",
-                "trim_nextseq",
-                "skip_trimming",
-                "save_trimmed",
-            ),
+        "Peak Calling",
+        Params(
+            "macs_gsize",
+            "read_length",
         ),
-        Section(
-            "Alignment Options",
+        Spoiler(
+            "Advanced Peak Calling Options",
             Params(
-                "aligner",
-                "keep_dups",
-                "keep_multi_map",
-                "bwa_min_score",
-                "save_align_intermeds",
-                "save_unaligned",
-            ),
-        ),
-        Section(
-            "Peak Calling Options",
-            Params(
-                "read_length",
                 "narrow_peak",
                 "broad_cutoff",
                 "macs_fdr",
@@ -125,12 +105,47 @@ flow = [
                 "skip_consensus_peaks",
             ),
         ),
-        Section(
-            "Advanced customization Options",
+    ),
+    Section(
+        "Alignment Options",
+        Params("aligner"),
+        Spoiler(
+            "Advanced Alignment Options",
+            Params(
+                "keep_dups",
+                "keep_multi_map",
+                "bwa_min_score",
+                "save_align_intermeds",
+                "save_unaligned",
+            ),
+        ),
+    ),
+    Section(
+        "Output Directory",
+        Params("run_name"),
+        Text("Parent directory for outputs"),
+        Params("outdir"),
+    ),
+    Spoiler(
+        "Advanced Options",
+        Spoiler(
+            "Adapter Trimming Options",
+            Params(
+                "clip_r1",
+                "clip_r2",
+                "three_prime_clip_r1",
+                "three_prime_clip_r2",
+                "trim_nextseq",
+                "skip_trimming",
+                "save_trimmed",
+            ),
+        ),
+        Spoiler(
+            "Advanced Customization Options",
             Params("seq_center", "email", "multiqc_title"),
         ),
-        Section(
-            "Skip processes",
+        Spoiler(
+            "Skip Processes",
             Params(
                 "skip_fastqc",
                 "skip_picard_metrics",
@@ -179,6 +194,7 @@ generated_parameters = {
     ),
     "read_length": NextflowParameter(
         type=Optional[int],
+        appearance_type=Multiselect([50, 75, 100, 150, 200], allow_custom=False),
         display_name="Read Length",
         default=None,
         section_title=None,
@@ -218,7 +234,7 @@ generated_parameters = {
     ),
     "genome": NextflowParameter(
         type=Optional[str],
-        display_name="Reference Genome",
+        display_name="iGenomes Reference",
         default=None,
         description="Name of iGenomes reference.",
     ),
@@ -283,7 +299,7 @@ generated_parameters = {
         display_name="MACS2 Genome Size",
         default=None,
         section_title=None,
-        description="Effective genome size parameter required by MACS2.",
+        description="Effective genome size parameter required by MACS2. Either --macs_gsize or --read_length must be specified.",
     ),
     "blacklist": NextflowParameter(
         type=Optional[str],
@@ -348,9 +364,9 @@ generated_parameters = {
         description="Save the trimmed FastQ files in the results directory.",
     ),
     "aligner": NextflowParameter(
-        type=Optional[str],
+        type=Aligner,
         display_name="Aligner",
-        default="bwa",
+        default=Aligner.bwa,
         description="Specifies the alignment algorithm to use - available options are 'bwa', 'bowtie2' and 'star'.",
     ),
     "keep_dups": NextflowParameter(
