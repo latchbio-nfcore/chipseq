@@ -8,6 +8,7 @@ NextflowMetadata(
     author=LatchAuthor(
         name="nf-core",
     ),
+    repository="https://github.com/latchbio-nfcore/chipseq",
     parameters=generated_parameters,
     runtime_resources=NextflowRuntimeResources(
         cpus=4,

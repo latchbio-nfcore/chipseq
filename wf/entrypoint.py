@@ -81,19 +81,7 @@ def initialize(run_name: str) -> str:
 
 @nextflow_runtime_task(cpu=4, memory=8, storage_gib=100)
 def nextflow_runtime(
-    run_name: Annotated[
-        str,
-        FlyteAnnotation(
-            {
-                "rules": [
-                    {
-                        "regex": r"^[a-zA-Z0-9_-]+$",
-                        "message": "ID name must contain only letters, digits, underscores, and dashes. No spaces are allowed.",
-                    }
-                ],
-            }
-        ),
-    ],
+    run_name: str,
     pvc_name: str,
     input: List[SampleSheet],
     seq_center: Optional[str],

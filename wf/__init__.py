@@ -23,19 +23,7 @@ import_module_by_path(meta)
 
 @workflow(metadata._nextflow_metadata)
 def nf_nf_core_chipseq(
-    run_name: Annotated[
-        str,
-        FlyteAnnotation(
-            {
-                "rules": [
-                    {
-                        "regex": r"^[a-zA-Z0-9_-]+$",
-                        "message": "ID name must contain only letters, digits, underscores, and dashes. No spaces are allowed.",
-                    }
-                ],
-            }
-        ),
-    ],
+    run_name: str,
     input: List[SampleSheet],
     seq_center: Optional[str],
     read_length: Optional[int],
