@@ -1,330 +1,552 @@
-
 from dataclasses import dataclass
-import typing
-import typing_extensions
+from enum import Enum
+from typing import List, Optional
 
-from flytekit.core.annotation import FlyteAnnotation
-
-from latch.types.metadata import NextflowParameter
+from latch.types.directory import LatchOutputDir
 from latch.types.file import LatchFile
-from latch.types.directory import LatchDir, LatchOutputDir
+from latch.types.metadata import (
+    Fork,
+    ForkBranch,
+    LatchRule,
+    Multiselect,
+    NextflowParameter,
+    Params,
+    Section,
+    Spoiler,
+    Text,
+)
 
-# Import these into your `__init__.py` file:
-#
-# from .parameters import generated_parameters
+
+class Aligner(Enum):
+    bwa = "bwa"
+    bowtie2 = "bowtie2"
+    chromap = "chromap"
+    star = "star"
+
+
+@dataclass
+class SampleSheet:
+    sample: str
+    fastq_1: LatchFile
+    fastq_2: Optional[LatchFile]
+    antibody: Optional[str]
+    control: Optional[str]
+
+
+class Reference_Type(Enum):
+    homo_sapiens = "Homo sapiens (RefSeq GRCh38.p14)"
+    mus_musculus = "Mus musculus (RefSeq GRCm39)"
+    # rattus_norvegicus = "Rattus norvegicus (RefSeq GRCr8)"
+
+
+flow = [
+    Section(
+        "Input",
+        Params(
+            "input",
+            "fragment_size",
+        ),
+    ),
+    Section(
+        "Reference Genome",
+        Fork(
+            "genome_source",
+            "",
+            latch_genome_source=ForkBranch(
+                "Latch Verified Reference Genome",
+                Params(
+                    "latch_genome",
+                ),
+            ),
+            custom=ForkBranch(
+                "Custom Reference Genome",
+                Params(
+                    "fasta",
+                    "gtf",
+                ),
+                Spoiler(
+                    "Advanced Options",
+                    Params(
+                        "gff",
+                        "bwa_index",
+                        "bowtie2_index",
+                        "chromap_index",
+                        "star_index",
+                        "gene_bed",
+                        "blacklist",
+                        "save_reference",
+                    ),
+                    Text(
+                        "Use iGenomes with caution. The transcriptome and GTF files in iGenomes are vastly out of date with respect to current annotations from Ensembl e.g. human iGenomes annotations are from Ensembl release 75, while the current Ensembl release is 108. Please consider downloading and using a more updated version of your reference genome."
+                    ),
+                    Params(
+                        "genome",
+                    ),
+                ),
+            ),
+        ),
+    ),
+    Section(
+        "Peak Calling",
+        Params(
+            "macs_gsize",
+            "read_length",
+        ),
+        Spoiler(
+            "Advanced Peak Calling Options",
+            Params(
+                "narrow_peak",
+                "broad_cutoff",
+                "macs_fdr",
+                "macs_pvalue",
+                "min_reps_consensus",
+                "save_macs_pileup",
+                "skip_peak_qc",
+                "skip_peak_annotation",
+                "skip_consensus_peaks",
+            ),
+        ),
+    ),
+    Section(
+        "Alignment Options",
+        Params("aligner"),
+        Spoiler(
+            "Advanced Alignment Options",
+            Params(
+                "keep_dups",
+                "keep_multi_map",
+                "bwa_min_score",
+                "save_align_intermeds",
+                "save_unaligned",
+            ),
+        ),
+    ),
+    Section(
+        "Output Directory",
+        Params("run_name"),
+        Text("Parent directory for outputs"),
+        Params("outdir"),
+    ),
+    Spoiler(
+        "Advanced Options",
+        Spoiler(
+            "Adapter Trimming Options",
+            Params(
+                "clip_r1",
+                "clip_r2",
+                "three_prime_clip_r1",
+                "three_prime_clip_r2",
+                "trim_nextseq",
+                "skip_trimming",
+                "save_trimmed",
+            ),
+        ),
+        Spoiler(
+            "Advanced Customization Options",
+            Params("seq_center", "email", "multiqc_title"),
+        ),
+        Spoiler(
+            "Skip Processes",
+            Params(
+                "skip_fastqc",
+                "skip_picard_metrics",
+                "skip_preseq",
+                "deseq2_vst",
+                "skip_plot_profile",
+                "skip_plot_fingerprint",
+                "skip_spp",
+                "skip_deseq2_qc",
+                "skip_igv",
+                "skip_multiqc",
+                "skip_qc",
+            ),
+        ),
+    ),
+]
+
 
 generated_parameters = {
-    'input': NextflowParameter(
-        type=typing.Optional[LatchFile],
-        default=None,
-        section_title='Input/output options',
-        description='Path to comma-separated file containing information about the samples in the experiment.',
+    "run_name": NextflowParameter(
+        type=str,
+        display_name="Run Name",
+        description="Name of run",
+        batch_table_column=True,
+        rules=[
+            LatchRule(
+                regex=r"^[a-zA-Z0-9_-]+$",
+                message="Run name must contain only letters, digits, underscores, and dashes. No spaces are allowed.",
+            )
+        ],
     ),
-    'fragment_size': NextflowParameter(
-        type=typing.Optional[int],
+    "input": NextflowParameter(
+        type=List[SampleSheet],
+        display_name="Sample Sheet",
+        samplesheet=True,
+        samplesheet_type="csv",
+        description="Samplesheet containing information about the samples in the experiment.",
+    ),
+    "fragment_size": NextflowParameter(
+        type=int,
+        display_name="Fragment Size",
         default=200,
         section_title=None,
-        description='Estimated fragment size used to extend single-end reads.',
+        description="Estimated fragment size used to extend single-end reads.",
     ),
-    'seq_center': NextflowParameter(
-        type=typing.Optional[str],
+    "seq_center": NextflowParameter(
+        type=Optional[str],
+        display_name="Sequencing Center",
         default=None,
         section_title=None,
-        description='Sequencing center information to be added to read group of BAM files.',
+        description="Sequencing center information to be added to read group of BAM files.",
     ),
-    'read_length': NextflowParameter(
-        type=typing.Optional[int],
+    "read_length": NextflowParameter(
+        type=Optional[int],
+        appearance_type=Multiselect([50, 75, 100, 150, 200], allow_custom=False),
+        display_name="Read Length",
         default=None,
         section_title=None,
         description="Read length used to calculate MACS2 genome size for peak calling if `--macs_gsize` isn't provided.",
     ),
-    'outdir': NextflowParameter(
-        type=typing_extensions.Annotated[LatchDir, FlyteAnnotation({'output': True})],
+    "outdir": NextflowParameter(
+        type=LatchOutputDir,
+        display_name="Output Directory",
         default=None,
         section_title=None,
-        description='The output directory where the results will be saved. You have to use absolute paths to storage on Cloud infrastructure.',
+        description="The output directory where the results will be saved. You have to use absolute paths to storage on Cloud infrastructure.",
     ),
-    'email': NextflowParameter(
-        type=typing.Optional[str],
+    "genome_source": NextflowParameter(
+        type=str,
+        display_name="Reference Genome",
+        description="Choose Reference Genome",
+    ),
+    "latch_genome": NextflowParameter(
+        type=Reference_Type,
+        display_name="Latch Verfied Reference Genome",
+        description="Name of Latch Verfied Reference Genome.",
+        default=Reference_Type.homo_sapiens,
+    ),
+    "email": NextflowParameter(
+        type=Optional[str],
+        display_name="Email Address",
         default=None,
         section_title=None,
-        description='Email address for completion summary.',
+        description="Email address for completion summary.",
     ),
-    'multiqc_title': NextflowParameter(
-        type=typing.Optional[str],
+    "multiqc_title": NextflowParameter(
+        type=Optional[str],
+        display_name="MultiQC Report Title",
         default=None,
         section_title=None,
-        description='MultiQC report title. Printed as page header, used for filename if not otherwise specified.',
+        description="MultiQC report title. Printed as page header, used for filename if not otherwise specified.",
     ),
-    'genome': NextflowParameter(
-        type=typing.Optional[str],
+    "genome": NextflowParameter(
+        type=Optional[str],
+        display_name="iGenomes Reference",
         default=None,
-        section_title='Reference genome options',
-        description='Name of iGenomes reference.',
+        description="Name of iGenomes reference.",
     ),
-    'fasta': NextflowParameter(
-        type=typing.Optional[LatchFile],
-        default=None,
-        section_title=None,
-        description='Path to FASTA genome file.',
-    ),
-    'gtf': NextflowParameter(
-        type=typing.Optional[LatchFile],
+    "fasta": NextflowParameter(
+        type=Optional[LatchFile],
+        display_name="Genome FASTA File",
         default=None,
         section_title=None,
-        description='Path to GTF annotation file.',
+        description="Path to FASTA genome file.",
     ),
-    'gff': NextflowParameter(
-        type=typing.Optional[LatchFile],
+    "gtf": NextflowParameter(
+        type=Optional[LatchFile],
+        display_name="GTF Annotation File",
         default=None,
         section_title=None,
-        description='Path to GFF3 annotation file.',
+        description="Path to GTF annotation file.",
     ),
-    'bwa_index': NextflowParameter(
-        type=typing.Optional[str],
+    "gff": NextflowParameter(
+        type=Optional[LatchFile],
+        display_name="GFF3 Annotation File",
         default=None,
         section_title=None,
-        description='Path to directory or tar.gz archive for pre-built BWA index.',
+        description="Path to GFF3 annotation file.",
     ),
-    'bowtie2_index': NextflowParameter(
-        type=typing.Optional[str],
+    "bwa_index": NextflowParameter(
+        type=Optional[str],
+        display_name="BWA Index",
         default=None,
         section_title=None,
-        description='Path to directory or tar.gz archive for pre-built Bowtie2 index.',
+        description="Path to directory or tar.gz archive for pre-built BWA index.",
     ),
-    'chromap_index': NextflowParameter(
-        type=typing.Optional[str],
+    "bowtie2_index": NextflowParameter(
+        type=Optional[str],
+        display_name="Bowtie2 Index",
         default=None,
         section_title=None,
-        description='Path to directory or tar.gz archive for pre-built Chromap index.',
+        description="Path to directory or tar.gz archive for pre-built Bowtie2 index.",
     ),
-    'star_index': NextflowParameter(
-        type=typing.Optional[str],
+    "chromap_index": NextflowParameter(
+        type=Optional[str],
+        display_name="Chromap Index",
         default=None,
         section_title=None,
-        description='Path to directory or tar.gz archive for pre-built STAR index.',
+        description="Path to directory or tar.gz archive for pre-built Chromap index.",
     ),
-    'gene_bed': NextflowParameter(
-        type=typing.Optional[LatchFile],
+    "star_index": NextflowParameter(
+        type=Optional[str],
+        display_name="STAR Index",
         default=None,
         section_title=None,
-        description='Path to BED file containing gene intervals. This will be created from the GTF file if not specified.',
+        description="Path to directory or tar.gz archive for pre-built STAR index.",
     ),
-    'macs_gsize': NextflowParameter(
-        type=typing.Optional[float],
+    "gene_bed": NextflowParameter(
+        type=Optional[LatchFile],
+        display_name="Gene BED File",
         default=None,
         section_title=None,
-        description='Effective genome size parameter required by MACS2.',
+        description="Path to BED file containing gene intervals. This will be created from the GTF file if not specified.",
     ),
-    'blacklist': NextflowParameter(
-        type=typing.Optional[str],
+    "macs_gsize": NextflowParameter(
+        type=Optional[float],
+        display_name="MACS2 Genome Size",
         default=None,
         section_title=None,
-        description='Path to blacklist regions in BED format, used for filtering alignments.',
+        description="Effective genome size parameter required by MACS2. Either --macs_gsize or --read_length must be specified.",
     ),
-    'save_reference': NextflowParameter(
-        type=typing.Optional[bool],
+    "blacklist": NextflowParameter(
+        type=Optional[str],
+        display_name="Blacklist Regions",
         default=None,
         section_title=None,
-        description='If generated by the pipeline save the BWA index in the results directory.',
+        description="Path to blacklist regions in BED format, used for filtering alignments.",
     ),
-    'clip_r1': NextflowParameter(
-        type=typing.Optional[int],
+    "save_reference": NextflowParameter(
+        type=bool,
+        display_name="Save Reference",
         default=None,
-        section_title='Adapter trimming options',
+        section_title=None,
+        description="If generated by the pipeline save the BWA index in the results directory.",
+    ),
+    "clip_r1": NextflowParameter(
+        type=Optional[int],
+        display_name="Clip R1",
+        default=None,
         description="Instructs Trim Galore to remove bp from the 5' end of read 1 (or single-end reads).",
     ),
-    'clip_r2': NextflowParameter(
-        type=typing.Optional[int],
+    "clip_r2": NextflowParameter(
+        type=Optional[int],
+        display_name="Clip R2",
         default=None,
         section_title=None,
         description="Instructs Trim Galore to remove bp from the 5' end of read 2 (paired-end reads only).",
     ),
-    'three_prime_clip_r1': NextflowParameter(
-        type=typing.Optional[int],
+    "three_prime_clip_r1": NextflowParameter(
+        type=Optional[int],
+        display_name="3' Clip R1",
         default=None,
         section_title=None,
         description="Instructs Trim Galore to remove bp from the 3' end of read 1 AFTER adapter/quality trimming has been performed.",
     ),
-    'three_prime_clip_r2': NextflowParameter(
-        type=typing.Optional[int],
+    "three_prime_clip_r2": NextflowParameter(
+        type=Optional[int],
+        display_name="3' Clip R2",
         default=None,
         section_title=None,
         description="Instructs Trim Galore to remove bp from the 3' end of read 2 AFTER adapter/quality trimming has been performed.",
     ),
-    'trim_nextseq': NextflowParameter(
-        type=typing.Optional[int],
+    "trim_nextseq": NextflowParameter(
+        type=Optional[int],
+        display_name="Trim NextSeq",
         default=None,
         section_title=None,
-        description='Instructs Trim Galore to apply the --nextseq=X option, to trim based on quality after removing poly-G tails.',
+        description="Instructs Trim Galore to apply the --nextseq=X option, to trim based on quality after removing poly-G tails.",
     ),
-    'skip_trimming': NextflowParameter(
-        type=typing.Optional[bool],
+    "skip_trimming": NextflowParameter(
+        type=bool,
+        display_name="Skip Trimming",
         default=None,
         section_title=None,
-        description='Skip the adapter trimming step.',
+        description="Skip the adapter trimming step.",
     ),
-    'save_trimmed': NextflowParameter(
-        type=typing.Optional[bool],
+    "save_trimmed": NextflowParameter(
+        type=bool,
+        display_name="Save Trimmed Reads",
         default=None,
         section_title=None,
-        description='Save the trimmed FastQ files in the results directory.',
+        description="Save the trimmed FastQ files in the results directory.",
     ),
-    'aligner': NextflowParameter(
-        type=typing.Optional[str],
-        default='bwa',
-        section_title='Alignment options',
+    "aligner": NextflowParameter(
+        type=Aligner,
+        display_name="Aligner",
+        default=Aligner.bwa,
         description="Specifies the alignment algorithm to use - available options are 'bwa', 'bowtie2' and 'star'.",
     ),
-    'keep_dups': NextflowParameter(
-        type=typing.Optional[bool],
+    "keep_dups": NextflowParameter(
+        type=bool,
+        display_name="Keep Duplicates",
         default=None,
         section_title=None,
-        description='Duplicate reads are not filtered from alignments.',
+        description="Duplicate reads are not filtered from alignments.",
     ),
-    'keep_multi_map': NextflowParameter(
-        type=typing.Optional[bool],
+    "keep_multi_map": NextflowParameter(
+        type=bool,
+        display_name="Keep Multi-mapped Reads",
         default=None,
         section_title=None,
-        description='Reads mapping to multiple locations are not filtered from alignments.',
+        description="Reads mapping to multiple locations are not filtered from alignments.",
     ),
-    'bwa_min_score': NextflowParameter(
-        type=typing.Optional[int],
+    "bwa_min_score": NextflowParameter(
+        type=Optional[int],
+        display_name="BWA Minimum Score",
         default=None,
         section_title=None,
-        description='Don’t output BWA MEM alignments with score lower than this parameter.',
+        description="Don't output BWA MEM alignments with score lower than this parameter.",
     ),
-    'save_align_intermeds': NextflowParameter(
-        type=typing.Optional[bool],
+    "save_align_intermeds": NextflowParameter(
+        type=bool,
+        display_name="Save Alignment Intermediates",
         default=None,
         section_title=None,
-        description='Save the intermediate BAM files from the alignment step.',
+        description="Save the intermediate BAM files from the alignment step.",
     ),
-    'save_unaligned': NextflowParameter(
-        type=typing.Optional[bool],
+    "save_unaligned": NextflowParameter(
+        type=bool,
+        display_name="Save Unaligned Reads",
         default=None,
         section_title=None,
-        description='Where possible, save unaligned reads from either STAR, HISAT2 or Salmon to the results directory.',
+        description="Where possible, save unaligned reads from either STAR, HISAT2 or Salmon to the results directory.",
     ),
-    'narrow_peak': NextflowParameter(
-        type=typing.Optional[bool],
+    "narrow_peak": NextflowParameter(
+        type=bool,
+        display_name="Narrow Peak Mode",
         default=None,
-        section_title='Peak calling options',
-        description='Run MACS2 in narrowPeak mode.',
+        description="Run MACS2 in narrowPeak mode.",
     ),
-    'broad_cutoff': NextflowParameter(
-        type=typing.Optional[float],
+    "broad_cutoff": NextflowParameter(
+        type=Optional[float],
+        display_name="Broad Cutoff",
         default=0.1,
         section_title=None,
-        description='Specifies broad cutoff value for MACS2. Only used when --narrow_peak isnt specified.',
+        description="Specifies broad cutoff value for MACS2. Only used when --narrow_peak isnt specified.",
     ),
-    'macs_fdr': NextflowParameter(
-        type=typing.Optional[float],
+    "macs_fdr": NextflowParameter(
+        type=Optional[float],
+        display_name="MACS2 FDR",
         default=None,
         section_title=None,
-        description='Minimum FDR (q-value) cutoff for peak detection, --macs_fdr and --macs_pvalue are mutually exclusive.',
+        description="Minimum FDR (q-value) cutoff for peak detection, --macs_fdr and --macs_pvalue are mutually exclusive.",
     ),
-    'macs_pvalue': NextflowParameter(
-        type=typing.Optional[float],
+    "macs_pvalue": NextflowParameter(
+        type=Optional[float],
+        display_name="MACS2 p-value",
         default=None,
         section_title=None,
-        description='p-value cutoff for peak detection, --macs_fdr and --macs_pvalue are mutually exclusive. If --macs_pvalue cutoff is set, q-value will not be calculated and reported as -1 in the final .xls file.',
+        description="p-value cutoff for peak detection, --macs_fdr and --macs_pvalue are mutually exclusive. If --macs_pvalue cutoff is set, q-value will not be calculated and reported as -1 in the final .xls file.",
     ),
-    'min_reps_consensus': NextflowParameter(
-        type=typing.Optional[int],
+    "min_reps_consensus": NextflowParameter(
+        type=Optional[int],
+        display_name="Minimum Replicates for Consensus",
         default=1,
         section_title=None,
-        description='Number of biological replicates required from a given condition for a peak to contribute to a consensus peak.',
+        description="Number of biological replicates required from a given condition for a peak to contribute to a consensus peak.",
     ),
-    'save_macs_pileup': NextflowParameter(
-        type=typing.Optional[bool],
+    "save_macs_pileup": NextflowParameter(
+        type=bool,
+        display_name="Save MACS2 Pileup",
         default=None,
         section_title=None,
-        description='Instruct MACS2 to create bedGraph files normalised to signal per million reads.',
+        description="Instruct MACS2 to create bedGraph files normalised to signal per million reads.",
     ),
-    'skip_peak_qc': NextflowParameter(
-        type=typing.Optional[bool],
+    "skip_peak_qc": NextflowParameter(
+        type=bool,
+        display_name="Skip Peak QC",
         default=None,
         section_title=None,
-        description='Skip MACS2 peak QC plot generation.',
+        description="Skip MACS2 peak QC plot generation.",
     ),
-    'skip_peak_annotation': NextflowParameter(
-        type=typing.Optional[bool],
+    "skip_peak_annotation": NextflowParameter(
+        type=bool,
+        display_name="Skip Peak Annotation",
         default=None,
         section_title=None,
-        description='Skip annotation of MACS2 and consensus peaks with HOMER.',
+        description="Skip annotation of MACS2 and consensus peaks with HOMER.",
     ),
-    'skip_consensus_peaks': NextflowParameter(
-        type=typing.Optional[bool],
+    "skip_consensus_peaks": NextflowParameter(
+        type=bool,
+        display_name="Skip Consensus Peaks",
         default=None,
         section_title=None,
-        description='Skip consensus peak generation, annotation and counting.',
+        description="Skip consensus peak generation, annotation and counting.",
     ),
-    'skip_fastqc': NextflowParameter(
-        type=typing.Optional[bool],
+    "skip_fastqc": NextflowParameter(
+        type=bool,
+        display_name="Skip FastQC",
         default=None,
-        section_title='Process skipping options',
-        description='Skip FastQC.',
+        description="Skip FastQC.",
     ),
-    'skip_picard_metrics': NextflowParameter(
-        type=typing.Optional[bool],
-        default=None,
-        section_title=None,
-        description='Skip Picard CollectMultipleMetrics.',
-    ),
-    'skip_preseq': NextflowParameter(
-        type=typing.Optional[bool],
+    "skip_picard_metrics": NextflowParameter(
+        type=bool,
+        display_name="Skip Picard Metrics",
         default=None,
         section_title=None,
-        description='Skip Preseq.',
+        description="Skip Picard CollectMultipleMetrics.",
     ),
-    'deseq2_vst': NextflowParameter(
-        type=typing.Optional[bool],
+    "skip_preseq": NextflowParameter(
+        type=bool,
+        display_name="Skip Preseq",
+        default=None,
+        section_title=None,
+        description="Skip Preseq.",
+    ),
+    "deseq2_vst": NextflowParameter(
+        type=bool,
+        display_name="DESeq2 VST",
         default=True,
         section_title=None,
-        description='Use vst transformation instead of rlog with DESeq2.',
+        description="Use vst transformation instead of rlog with DESeq2.",
     ),
-    'skip_plot_profile': NextflowParameter(
-        type=typing.Optional[bool],
+    "skip_plot_profile": NextflowParameter(
+        type=bool,
+        display_name="Skip Plot Profile",
         default=None,
         section_title=None,
-        description='Skip deepTools plotProfile.',
+        description="Skip deepTools plotProfile.",
     ),
-    'skip_plot_fingerprint': NextflowParameter(
-        type=typing.Optional[bool],
+    "skip_plot_fingerprint": NextflowParameter(
+        type=bool,
+        display_name="Skip Plot Fingerprint",
         default=None,
         section_title=None,
-        description='Skip deepTools plotFingerprint.',
+        description="Skip deepTools plotFingerprint.",
     ),
-    'skip_spp': NextflowParameter(
-        type=typing.Optional[bool],
+    "skip_spp": NextflowParameter(
+        type=bool,
+        display_name="Skip SPP",
         default=None,
         section_title=None,
-        description='Skip Phantompeakqualtools.',
+        description="Skip Phantompeakqualtools.",
     ),
-    'skip_deseq2_qc': NextflowParameter(
-        type=typing.Optional[bool],
+    "skip_deseq2_qc": NextflowParameter(
+        type=bool,
+        display_name="Skip DESeq2 QC",
         default=None,
         section_title=None,
-        description='Skip DESeq2 PCA and heatmap plotting.',
+        description="Skip DESeq2 PCA and heatmap plotting.",
     ),
-    'skip_igv': NextflowParameter(
-        type=typing.Optional[bool],
+    "skip_igv": NextflowParameter(
+        type=bool,
+        display_name="Skip IGV",
         default=None,
         section_title=None,
-        description='Skip IGV.',
+        description="Skip IGV.",
     ),
-    'skip_multiqc': NextflowParameter(
-        type=typing.Optional[bool],
+    "skip_multiqc": NextflowParameter(
+        type=bool,
+        display_name="Skip MultiQC",
         default=None,
         section_title=None,
-        description='Skip MultiQC.',
+        description="Skip MultiQC.",
     ),
-    'skip_qc': NextflowParameter(
-        type=typing.Optional[bool],
+    "skip_qc": NextflowParameter(
+        type=bool,
+        display_name="Skip QC",
         default=None,
         section_title=None,
-        description='Skip all QC steps except for MultiQC.',
+        description="Skip all QC steps except for MultiQC.",
     ),
 }
-
