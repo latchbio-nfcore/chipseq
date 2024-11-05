@@ -1,5 +1,5 @@
 # DO NOT CHANGE
-from 812206152185.dkr.ecr.us-west-2.amazonaws.com/latch-base-nextflow:v2.1.2
+from 812206152185.dkr.ecr.us-west-2.amazonaws.com/latch-base-nextflow:v2.3.4
 
 workdir /tmp/docker-build/work/
 
@@ -21,7 +21,7 @@ arg DEBIAN_FRONTEND=noninteractive
 
 # Latch SDK
 # DO NOT REMOVE
-run pip install latch==2.52.1
+run pip install latch==2.53.11
 run mkdir /opt/latch
 
 
