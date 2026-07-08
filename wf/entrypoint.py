@@ -87,7 +87,6 @@ def nextflow_runtime(
     seq_center: Optional[str],
     read_length: Optional[int],
     genome_source: str,
-    latch_genome: Reference_Type,
     outdir: LatchOutputDir,
     email: Optional[str],
     multiqc_title: Optional[str],
@@ -137,6 +136,7 @@ def nextflow_runtime(
     broad_cutoff: Optional[float],
     min_reps_consensus: Optional[int],
     deseq2_vst: bool,
+    latch_genome: Reference_Type = Reference_Type.homo_sapiens,
 ) -> None:
     shared_dir = Path("/nf-workdir")
 
